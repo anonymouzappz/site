@@ -1,0 +1,30 @@
+.home-card-float {
+  animation: homeCardFloat 6s ease-in-out infinite;
+}
+
+.home-marquee {
+  display: inline-block;
+  min-width: 200%;
+  animation: homeMarquee 28s linear infinite;
+}
+
+@keyframes homeCardFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes homeMarquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}

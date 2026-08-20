@@ -1,26 +1,147 @@
 @import "tailwindcss";
 
+
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #e5e3d5;
+  --surface: rgba(236, 235, 220, 0.86);
+  --card: rgba(246, 245, 232, 0.94);
+
+  --foreground: #171a12;
+  --muted: #555b48;
+  --border: rgba(55, 65, 42, 0.24);
+
+  --accent: #596b3d;
+  --accent-dark: #344225;
+  --accent-soft: rgba(89, 107, 61, 0.20);
+
+  --grid: rgba(55, 65, 42, 0.08);
+  --spot: rgba(89, 107, 61, 0.12);
+}
+
+.dark {
+  --background: #050704;
+  --surface: rgba(13, 16, 10, 0.88);
+  --card: rgba(24, 29, 19, 0.90);
+
+  --foreground: #f4f5ed;
+  --muted: #a8ad9b;
+  --border: rgba(154, 166, 127, 0.16);
+
+  --accent: #667a45;
+  --accent-dark: #3f512c;
+  --accent-soft: rgba(102, 122, 69, 0.24);
+
+  --grid: rgba(151, 164, 124, 0.075);
+  --spot: rgba(102, 122, 69, 0.11);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-dark: var(--accent-dark);
+  --color-accent-soft: var(--accent-soft);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--background);
 }
 
 body {
-  background: var(--background);
+  position: relative;
+  min-height: 100vh;
   color: var(--foreground);
+  background: transparent;
   font-family: Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      circle at 10% 16%,
+      var(--spot),
+      transparent 26rem
+    ),
+    radial-gradient(
+      circle at 88% 78%,
+      var(--accent-soft),
+      transparent 34rem
+    ),
+    linear-gradient(
+      var(--grid) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      var(--grid) 1px,
+      transparent 1px
+    ),
+    var(--background);
+
+  background-size:
+    auto,
+    auto,
+    56px 56px,
+    56px 56px,
+    auto;
+
+  background-position:
+    center,
+    center,
+    center,
+    center,
+    center;
+}
+
+main,
+section {
+  background-color: transparent;
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+

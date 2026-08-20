@@ -1,0 +1,399 @@
+"use client";
+
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
+import {
+  ArrowLeft,
+  Check,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Sparkles,
+  Truck,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { db } from "@/lib/firebase";
+
+type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  price: number;
+  comparePrice: number;
+  categoryName: string;
+  imageUrls: string[];
+  tags: string[];
+  options: Record<string, string[]>;
+  stock: number;
+  shippingWeight?: number;
+  shippingWeightUnit?: string;
+  isActive: boolean;
+  isFeatured?: boolean;
+};
+
+export default function ProductDetailsClient({ slug }: { slug: string }) {
+  const [product, setProduct] = useState<Product | null>(null);
+  const [selectedImage, setSelectedImage] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(
+    {},
+  );
+  const [quantity, setQuantity] = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadProduct() {
+      try {
+        setLoading(true);
+
+        const q = query(
+          collection(db, "products"),
+          where("slug", "==", slug),
+          where("isActive", "==", true),
+          limit(1),
+        );
+
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          setProduct(null);
+          return;
+        }
+
+        const doc = snap.docs[0];
+        const data = doc.data();
+
+        const loadedProduct: Product = {
+          id: doc.id,
+          name: String(data.name || ""),
+          slug: String(data.slug || slug),
+          description: String(data.description || ""),
+          price: Number(data.price || 0),
+          comparePrice: Number(data.comparePrice || 0),
+          categoryName: String(data.categoryName || ""),
+          imageUrls: Array.isArray(data.imageUrls)
+            ? data.imageUrls.map(String)
+            : [],
+          tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+          options: data.options || {},
+          stock: Number(data.stock || 0),
+          shippingWeight: Number(data.shippingWeight || 0),
+          shippingWeightUnit: String(data.shippingWeightUnit || "oz"),
+          isActive: Boolean(data.isActive),
+          isFeatured: Boolean(data.isFeatured),
+        };
+
+        setProduct(loadedProduct);
+        setSelectedImage(loadedProduct.imageUrls[0] || "");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProduct();
+  }, [slug]);
+
+  const hasDiscount = useMemo(() => {
+    if (!product) return false;
+    return product.comparePrice > product.price;
+  }, [product]);
+
+  const discountPercent = useMemo(() => {
+    if (!product || !hasDiscount) return 0;
+
+    return Math.round(
+      ((product.comparePrice - product.price) / product.comparePrice) * 100,
+    );
+  }, [product, hasDiscount]);
+
+  function selectOption(optionName: string, value: string) {
+    setSelectedOptions((current) => ({
+      ...current,
+      [optionName]: value,
+    }));
+  }
+
+  function addToCart() {
+    if (!product) return;
+
+    const cartItem = {
+      productId: product.id,
+      name: product.name,
+      slug: product.slug,
+      price: product.price,
+      imageUrl: product.imageUrls[0] || "",
+      quantity,
+      options: selectedOptions,
+    };
+
+    const currentCart = JSON.parse(localStorage.getItem("cart") || "[]");
+    currentCart.push(cartItem);
+    localStorage.setItem("cart", JSON.stringify(currentCart));
+
+    window.dispatchEvent(new Event("cart-updated"));
+    alert("Added to cart.");
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen px-6 py-20 text-foreground">
+        <div className="mx-auto max-w-7xl">
+          <div className="h-[600px] animate-pulse rounded-[2rem] border border-border bg-card/60" />
+        </div>
+      </main>
+    );
+  }
+
+  if (!product) {
+    return (
+      <main className="min-h-screen px-6 py-20 text-foreground">
+        <section className="mx-auto max-w-3xl rounded-[2rem] border border-border bg-card/70 p-10 text-center backdrop-blur-xl">
+          <h1 className="text-4xl font-black uppercase">Product Not Found</h1>
+          <p className="mt-4 text-muted">
+            This product may be unavailable or inactive.
+          </p>
+          <Link
+            href="/shop"
+            className="mt-8 inline-flex rounded-full bg-accent px-6 py-4 text-xs font-black uppercase tracking-[0.25em] text-white"
+          >
+            Back To Shop
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen px-4 py-10 text-foreground sm:px-6 lg:py-16">
+      <section className="mx-auto max-w-7xl">
+        <Link
+          href="/shop"
+          className="mb-6 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.25em] text-muted transition hover:text-foreground"
+        >
+          <ArrowLeft size={16} />
+          Back To Shop
+        </Link>
+
+        <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="space-y-4">
+            <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card/70 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+              {product.isFeatured && (
+                <div className="absolute left-5 top-5 z-20 rounded-full bg-accent px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(152,0,0,0.35)]">
+                  Featured
+                </div>
+              )}
+
+              {hasDiscount && (
+                <div className="absolute right-5 top-5 z-20 rounded-full bg-foreground px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-background">
+                  Save {discountPercent}%
+                </div>
+              )}
+
+              <div className="relative aspect-square overflow-hidden rounded-[1.5rem] bg-background">
+                {selectedImage ? (
+                  <Image
+                    src={selectedImage}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    className="object-cover"
+                    priority
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <ShoppingBag size={72} className="text-muted" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {product.imageUrls.length > 1 && (
+              <div className="grid grid-cols-5 gap-3">
+                {product.imageUrls.map((url) => {
+                  const active = selectedImage === url;
+
+                  return (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => setSelectedImage(url)}
+                      className={`relative aspect-square overflow-hidden rounded-2xl border bg-card transition ${
+                        active
+                          ? "border-accent shadow-[0_0_24px_rgba(152,0,0,0.35)]"
+                          : "border-border"
+                      }`}
+                    >
+                      <Image
+                        src={url}
+                        alt={product.name}
+                        fill
+                        sizes="120px"
+                        className="object-cover"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[2rem] border border-border bg-card/70 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:p-8">
+            <div className="mb-5 flex flex-wrap gap-2">
+              {product.categoryName && (
+                <span className="rounded-full border border-border bg-background/60 px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-muted">
+                  {product.categoryName}
+                </span>
+              )}
+
+              {product.stock > 0 ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-muted">
+                  <Check size={13} />
+                  In Stock
+                </span>
+              ) : (
+                <span className="rounded-full bg-accent px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                  Sold Out
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-4xl font-black uppercase leading-none tracking-tight sm:text-6xl">
+              {product.name}
+            </h1>
+
+            <div className="mt-5 flex items-end gap-3">
+              <p className="text-3xl font-black">
+                ${product.price.toFixed(2)}
+              </p>
+
+              {hasDiscount && (
+                <p className="pb-1 text-lg font-bold text-muted line-through">
+                  ${product.comparePrice.toFixed(2)}
+                </p>
+              )}
+            </div>
+
+            <p className="mt-6 whitespace-pre-line text-sm leading-7 text-muted sm:text-base">
+              {product.description}
+            </p>
+
+            {Object.entries(product.options).length > 0 && (
+              <div className="mt-8 space-y-6">
+                {Object.entries(product.options).map(([optionName, values]) => (
+                  <div key={optionName}>
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.3em] text-muted">
+                      {optionName}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                      {values.map((value) => {
+                        const active = selectedOptions[optionName] === value;
+
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => selectOption(optionName, value)}
+                            className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] transition ${
+                              active
+                                ? "border-accent bg-accent text-white"
+                                : "border-border bg-background/60 text-foreground hover:border-accent"
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-8 flex items-center gap-3">
+              <div className="flex h-12 items-center rounded-full border border-border bg-background/60">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="flex h-12 w-12 items-center justify-center"
+                >
+                  <Minus size={16} />
+                </button>
+
+                <span className="w-10 text-center text-sm font-black">
+                  {quantity}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setQuantity((q) => Math.min(product.stock || 99, q + 1))
+                  }
+                  className="flex h-12 w-12 items-center justify-center"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={addToCart}
+                disabled={product.stock <= 0}
+                className="group relative flex h-12 flex-1 items-center justify-center overflow-hidden rounded-full bg-accent px-6 text-xs font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(152,0,0,0.35)] transition disabled:opacity-50"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:opacity-100" />
+                <span className="relative z-10 flex items-center gap-2">
+                  <ShoppingBag size={16} />
+                  Add To Cart
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-background/50 p-4">
+                <Truck size={20} className="mb-3 text-accent" />
+                <p className="text-xs font-black uppercase tracking-[0.2em]">
+                  Shipping Ready
+                </p>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Weight: {product.shippingWeight || 0}{" "}
+                  {product.shippingWeightUnit || "oz"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background/50 p-4">
+                <Sparkles size={20} className="mb-3 text-accent" />
+                <p className="text-xs font-black uppercase tracking-[0.2em]">
+                  Statement Wear
+                </p>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Built for awareness, rebellion, and self-expression.
+                </p>
+              </div>
+            </div>
+
+            {product.tags.length > 0 && (
+              <div className="mt-8 flex flex-wrap gap-2">
+                {product.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-border bg-background/60 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-muted"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
