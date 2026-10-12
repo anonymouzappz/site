@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { adminDb } from "@/lib/firebaseAdmin";
+export const dynamic = "force-dynamic";
 
 const siteUrl = "https://nurnrebel.com";
 
@@ -16,12 +16,7 @@ type FirestoreProduct = {
 
 async function getProductUrls(): Promise<MetadataRoute.Sitemap> {
   try {
-    const q = query(
-      collection(db, "products"),
-      where("isActive", "==", true),
-    );
-
-    const snap = await getDocs(q);
+    const snap = await adminDb.collection("products").where("isActive", "==", true).get();
 
     return snap.docs
       .map((doc) => {
@@ -115,5 +110,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const productPages = await getProductUrls();
 
-  return [...staticPages, ...productPages];
+  let blogPages: MetadataRoute.Sitemap = [];
+  try {
+    const posts = await adminDb.collection('blogPosts').where('isPublished', '==', true).get();
+    blogPages = posts.docs.filter(doc => doc.data().slug).map(doc => ({ url: `${siteUrl}/blog/${doc.data().slug}`, lastModified: doc.data().updatedAt?.toDate() || now, changeFrequency: 'weekly' as const, priority: 0.7 }));
+  } catch { /* Static pages and products can still be returned during a CMS outage. */ }
+  return [...staticPages, ...productPages, ...blogPages];
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useStoreSettings } from "@/lib/useStoreSettings";
+import { auth } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -21,6 +23,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 type CartItem = {
+  variantKey?: string;
+  sku?: string;
   productId: string;
   name: string;
   slug: string;
@@ -140,6 +144,8 @@ function normalizeOptions(value: unknown): Record<string, string> {
 
 function normalizeCartItem(item: CartItem): CartItem {
   return {
+    variantKey: item.variantKey,
+    sku: item.sku,
     productId: String(item.productId || ""),
     name: String(item.name || "Nurnrebel Product"),
     slug: String(item.slug || ""),
@@ -181,9 +187,8 @@ function loadCheckoutPreferences(): CheckoutPreferences {
 
     return {
       fulfillmentType:
-        parsed.fulfillmentType === "pickup" ||
-        parsed.fulfillmentType === "delivery" ||
-        parsed.fulfillmentType === "shipping"
+      parsed.fulfillmentType === "pickup" ||
+parsed.fulfillmentType === "delivery" || parsed.fulfillmentType === "shipping"
           ? parsed.fulfillmentType
           : undefined,
 
@@ -194,16 +199,6 @@ function loadCheckoutPreferences(): CheckoutPreferences {
             city: String(parsed.deliveryAddress.city || ""),
             state: String(parsed.deliveryAddress.state || ""),
             zip: String(parsed.deliveryAddress.zip || ""),
-          }
-        : undefined,
-
-      shippingAddress: isRecord(parsed.shippingAddress)
-        ? {
-            street1: String(parsed.shippingAddress.street1 || ""),
-            street2: String(parsed.shippingAddress.street2 || ""),
-            city: String(parsed.shippingAddress.city || ""),
-            state: String(parsed.shippingAddress.state || ""),
-            zip: String(parsed.shippingAddress.zip || ""),
           }
         : undefined,
     };
@@ -272,11 +267,12 @@ function resetRatesOnCartChange(
 }
 
 export default function CartPage() {
+  const settings = useStoreSettings();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [hasMounted, setHasMounted] = useState(false);
 
   const [fulfillmentType, setFulfillmentType] =
-    useState<FulfillmentType>("shipping");
+    useState<FulfillmentType>("pickup");
 
   const [deliveryAddress, setDeliveryAddress] =
     useState<Address>(emptyAddress);
@@ -297,24 +293,42 @@ export default function CartPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const preferences = loadCheckoutPreferences();
+  const refreshCart = () => setCart(loadCartFromStorage());
+  const init = setTimeout(() => {
+  const preferences = loadCheckoutPreferences();
 
-    setCart(loadCartFromStorage());
 
-    if (preferences.fulfillmentType) {
-      setFulfillmentType(preferences.fulfillmentType);
-    }
 
-    if (preferences.deliveryAddress) {
-      setDeliveryAddress(preferences.deliveryAddress);
-    }
+  // Initial cart load
+  refreshCart();
 
-    if (preferences.shippingAddress) {
-      setShippingAddress(preferences.shippingAddress);
-    }
+  if (preferences.fulfillmentType) {
+    setFulfillmentType(preferences.fulfillmentType);
+  }
 
-    setHasMounted(true);
-  }, []);
+  if (preferences.deliveryAddress) {
+    setDeliveryAddress(preferences.deliveryAddress);
+  }
+
+  if (preferences.shippingAddress) {
+    setShippingAddress(preferences.shippingAddress);
+  }
+
+  setHasMounted(true);
+  }, 0);
+
+  // Update cart when Add To Cart is pressed
+  window.addEventListener("cart-updated", refreshCart);
+
+  // Also update if localStorage changes from another browser tab
+  window.addEventListener("storage", refreshCart);
+
+  return () => {
+    clearTimeout(init);
+    window.removeEventListener("cart-updated", refreshCart);
+    window.removeEventListener("storage", refreshCart);
+  };
+}, []);
 
   useEffect(() => {
     if (!hasMounted) return;
@@ -333,6 +347,7 @@ export default function CartPage() {
 
     if (typeof window !== "undefined") {
       localStorage.setItem(CART_KEY, JSON.stringify(normalized));
+      window.dispatchEvent(new Event("cart-updated"));
     }
   }
 
@@ -467,6 +482,7 @@ export default function CartPage() {
   const total = subtotal + fulfillmentFee + processingFee;
 
   const checkoutBlockedReason = useMemo(() => {
+    if (!settings[`${fulfillmentType}Enabled`]) return "Choose an available fulfillment method.";
     if (cart.length === 0) return "Your cart is empty.";
 
     if (fulfillmentType === "delivery") {
@@ -483,7 +499,7 @@ export default function CartPage() {
     }
 
     return "";
-  }, [cart.length, deliveryEstimate, fulfillmentType, selectedShippingRate]);
+  }, [cart.length, deliveryEstimate, fulfillmentType, selectedShippingRate, settings]);
 
   async function calculateDeliveryEstimate() {
     try {
@@ -599,6 +615,7 @@ export default function CartPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(auth.currentUser ? { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` } : {}),
         },
         body: JSON.stringify({
           items: cart,
@@ -847,16 +864,16 @@ export default function CartPage() {
             </h2>
 
             <div className="mt-6 space-y-3">
-              <FulfillmentOption
+              {settings.pickupEnabled && <FulfillmentOption
                 active={fulfillmentType === "pickup"}
                 icon={<Store size={20} />}
                 title="Pickup"
-                description="No delivery fee. Pickup details will be shared after payment."
+                description={settings.pickupInstructions}
                 price="Free"
                 onClick={() => selectFulfillment("pickup")}
-              />
+              />}
 
-              <FulfillmentOption
+              {settings.deliveryEnabled && <FulfillmentOption
                 active={fulfillmentType === "delivery"}
                 icon={<Truck size={20} />}
                 title="Local Delivery"
@@ -867,9 +884,9 @@ export default function CartPage() {
                     : "Calculate"
                 }
                 onClick={() => selectFulfillment("delivery")}
-              />
+              />}
 
-              <FulfillmentOption
+              {settings.shippingEnabled && <FulfillmentOption
                 active={fulfillmentType === "shipping"}
                 icon={<Package size={20} />}
                 title="Shipping"
@@ -880,7 +897,7 @@ export default function CartPage() {
                     : "Rates"
                 }
                 onClick={() => selectFulfillment("shipping")}
-              />
+              />}
             </div>
 
             {fulfillmentType === "delivery" && (

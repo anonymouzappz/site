@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { adminDb } from '@/lib/firebaseAdmin';
+import { Timestamp } from 'firebase-admin/firestore';
 
 export const runtime = "nodejs";
 
@@ -258,6 +260,12 @@ export async function POST(req: Request) {
     }
 
     const rates = normalizeRates(data.rates || []);
+    const batch = adminDb.batch();
+    for (const rate of rates) batch.set(adminDb.collection('shipping_quotes').doc(rate.objectId), {
+      rate, address, weight: totalWeightOz, currency: rate.currency.toUpperCase(),
+      expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+    });
+    await batch.commit();
 
     if (rates.length === 0) {
       return NextResponse.json(

@@ -1,5 +1,7 @@
 "use client";
 
+import CollectionGrid from "@/components/shop/CollectionGrid";
+import { useContent } from "@/lib/useContent";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -31,6 +33,7 @@ type Product = {
   tags: string[];
   options: Record<string, string[]>;
   stock: number;
+  available: boolean;
   shippingWeight: number;
   shippingWeightUnit: string;
   isActive: boolean;
@@ -49,6 +52,9 @@ function cleanOptionName(value: string) {
 }
 
 export default function ShopPage() {
+  const { items: collections } = useContent("collections");
+  const [activeCollection, setActiveCollection] = useState("");
+  useEffect(() => { const timer = setTimeout(() => setActiveCollection(new URLSearchParams(window.location.search).get("collection") || ""), 0); return () => clearTimeout(timer); }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeFilter, setActiveFilter] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -92,6 +98,7 @@ export default function ShopPage() {
             tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
             options: safeOptions,
             stock: Number(data.stock || 0),
+            available: Number(data.stock || 0) > 0 || (Array.isArray(data.variants) && data.variants.some((variant: { trackInventory?: boolean; allowBackorder?: boolean; stock?: number }) => variant.trackInventory === false || variant.allowBackorder === true || Number(variant.stock || 0) > 0)),
             shippingWeight: Number(data.shippingWeight || 0),
             shippingWeightUnit: String(data.shippingWeightUnit || "oz"),
             isActive: Boolean(data.isActive ?? true),
@@ -126,21 +133,23 @@ export default function ShopPage() {
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    if (activeFilter === "All") return products;
-
-    return products.filter((product) => product.categoryName === activeFilter);
-  }, [activeFilter, products]);
+    const selectedCollection = collections.find(item => item.slug === activeCollection);
+    return products.filter(product => (activeFilter === 'All' || product.categoryName === activeFilter) &&
+      (!activeCollection || (selectedCollection?.productIds || []).includes(product.id)));
+  }, [activeFilter, products, collections, activeCollection]);
 
   const featuredCount = useMemo(() => {
     return products.filter((product) => product.isFeatured).length;
   }, [products]);
 
   const inStockCount = useMemo(() => {
-    return products.filter((product) => product.stock > 0).length;
+    return products.filter((product) => product.available).length;
   }, [products]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <CollectionGrid />
+      {activeCollection && <div className="mx-auto max-w-7xl px-5"><button onClick={() => { setActiveCollection(""); window.history.replaceState(null, "", "/shop"); }} className="text-accent">Show all products</button></div>}
       <section className="relative overflow-hidden border-b border-border">
         <div className="absolute left-0 top-0 h-[520px] w-[520px] rounded-full bg-white/[0.03] blur-3xl" />
         <div className="absolute right-0 top-40 h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
@@ -252,7 +261,7 @@ export default function ShopPage() {
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {filteredProducts.map((product, index) => {
               const imageUrl = product.imageUrls[0] || "";
-              const inStock = product.stock > 0;
+              const inStock = product.available;
 
               const primaryTag =
                 product.tags[0] ||

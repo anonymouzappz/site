@@ -1,0 +1,8 @@
+{
+  "indexes": [
+    {"collectionGroup":"musicTracks","queryScope":"COLLECTION","fields":[{"fieldPath":"isActive","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]},
+    {"collectionGroup":"products","queryScope":"COLLECTION","fields":[{"fieldPath":"isActive","order":"ASCENDING"},{"fieldPath":"slug","order":"ASCENDING"}]},
+    {"collectionGroup":"blogPosts","queryScope":"COLLECTION","fields":[{"fieldPath":"isPublished","order":"ASCENDING"},{"fieldPath":"slug","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

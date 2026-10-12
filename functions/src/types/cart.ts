@@ -1,4 +1,8 @@
 export type CartItem = {
+  variantKey?: string;
+  sku?: string;
+  inventoryId?: string;
+  trackInventory?: boolean;
   productId: string;
   name: string;
   slug: string;

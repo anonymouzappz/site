@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,10 +16,32 @@ import { motion } from "framer-motion";
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const [status, setStatus] = useState('Verifying payment…');
+  const [paid, setPaid] = useState(false);
 
   useEffect(() => {
-    localStorage.removeItem("nurnrebel_cart");
-  }, []);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    async function verify() {
+      if (!sessionId) { setStatus('No checkout session was provided.'); return; }
+      try {
+        const response = await fetch(`/api/checkout/status?session_id=${encodeURIComponent(sessionId)}`);
+        const data = await response.json();
+        if (cancelled) return;
+        if (!response.ok) throw new Error(data.error);
+        setPaid(data.paid);
+        if (data.paid) {
+          localStorage.removeItem('nurnrebel_cart');
+          window.dispatchEvent(new Event('cart-updated'));
+          setStatus(data.orderCreated ? `Order confirmed · ${data.fulfillmentStatus.replaceAll('_', ' ')}` : 'Payment received. Your order confirmation is processing.');
+        } else setStatus('Payment has not been confirmed yet. Your cart is saved.');
+        if (!data.orderCreated && ++attempts < 20) timer = setTimeout(verify, 3000);
+      } catch { if (!cancelled) setStatus('Unable to verify payment. Reload this page to try again.'); }
+    }
+    verify();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [sessionId]);
 
   return (
     <div className="min-h-screen bg-background px-5 py-20 text-foreground">
@@ -40,16 +62,15 @@ function CheckoutSuccessContent() {
               </div>
 
               <p className="mt-8 text-xs font-black uppercase tracking-[0.4em] text-accent">
-                Payment Successful
+                {paid ? 'Payment Successful' : 'Payment Status'}
               </p>
 
               <h1 className="mx-auto mt-4 max-w-3xl text-5xl font-black uppercase leading-none md:text-7xl">
-                Order Received
+                {paid ? 'Order Received' : 'Checking Your Order'}
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-sm leading-7 text-muted">
-                Thank you for supporting Nurnrebel / XNX. Your payment was
-                completed through Stripe, and your order is now being processed.
+                {status}
               </p>
 
               {sessionId && (
@@ -81,7 +102,7 @@ function CheckoutSuccessContent() {
             <InfoCard
               icon={<ShoppingBag size={22} />}
               title="Cart Cleared"
-              description="Your cart has been cleared so you can continue shopping fresh."
+              description={paid ? 'Your paid cart has been cleared.' : 'Your cart stays saved until payment is confirmed.'}
             />
           </div>
 

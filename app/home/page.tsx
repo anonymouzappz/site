@@ -1,5 +1,6 @@
 "use client";
 
+import CollectionGrid from "@/components/shop/CollectionGrid";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -93,6 +94,7 @@ const faqs = [
 export default function HomePage() {
   return (
     <div className="text-foreground">
+      <CollectionGrid />
       {/* HERO */}
       <section className="relative overflow-hidden border-b border-border">
         <div className="absolute left-0 top-0 h-[600px] w-[600px] rounded-full bg-white/[0.03] blur-3xl" />

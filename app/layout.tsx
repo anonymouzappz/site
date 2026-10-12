@@ -1,21 +1,24 @@
 import GoogleAdSense from "@/components/GoogleAdsense";
 import Footer from "@/components/layout/Footer";
+import StoreAnnouncement from "@/components/layout/StoreAnnouncement";
 import Navbar from "@/components/layout/Navbar";
 import MusicPlayer from "@/components/music/MusicPlayer";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: './fonts/geist-latin.woff2',
+  weight: '100 900',
   variable: "--font-geist-sans",
-  subsets: ["latin"],
   display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: './fonts/geist-mono-latin.woff2',
+  weight: '100 900',
   variable: "--font-geist-mono",
-  subsets: ["latin"],
   display: "swap",
 });
 
@@ -141,6 +144,7 @@ export default function RootLayout({
             </div>
 
             <Navbar />
+          <StoreAnnouncement />
 
             <main className="relative z-10 flex-1">{children}</main>
 

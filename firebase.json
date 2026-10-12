@@ -1,4 +1,22 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "auth": {
+      "port": 9099
+    },
+    "storage": {
+      "port": 9199
+    }
+  },
   "apphosting": {
     "backendId": "nurnrebel-site",
     "rootDir": ".",
@@ -6,8 +24,7 @@
       "node_modules",
       ".git",
       "firebase-debug.log",
-      "firebase-debug.*.log",
-      "functions"
+      "firebase-debug.*.log"
     ]
   },
   "functions": [

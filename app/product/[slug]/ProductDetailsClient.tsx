@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  collection,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, limit, query, where } from "firebase/firestore";
 import {
   ArrowLeft,
   Check,
@@ -19,7 +14,24 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { db } from "@/lib/firebase";
+
+import { selectedVariant, canPurchase, sameOptions, type Variant } from "@/functions/src/catalog";
+
+const CART_KEY = "nurnrebel_cart";
+
+type StoredCartItem = {
+  variantKey?: string;
+  sku?: string;
+  productId: string;
+  name: string;
+  slug: string;
+  price: number;
+  imageUrl: string;
+  quantity: number;
+  options: Record<string, string>;
+  shippingWeight?: number;
+  shippingWeightUnit?: string;
+};
 
 type Product = {
   id: string;
@@ -33,6 +45,7 @@ type Product = {
   tags: string[];
   options: Record<string, string[]>;
   stock: number;
+  variants: Variant[];
   shippingWeight?: number;
   shippingWeightUnit?: string;
   isActive: boolean;
@@ -42,16 +55,14 @@ type Product = {
 export default function ProductDetailsClient({ slug }: { slug: string }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState("");
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(
-    {},
-  );
+  const [selectedOptions, setSelectedOptions] = useState<
+    Record<string, string>
+  >({});
   const [quantity, setQuantity] = useState(1);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadProduct() {
-      try {
-        setLoading(true);
 
         const q = query(
           collection(db, "products"),
@@ -60,7 +71,8 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
           limit(1),
         );
 
-        const snap = await getDocs(q);
+        return onSnapshot(q, (snap) => {
+        setLoading(false);
 
         if (snap.empty) {
           setProduct(null);
@@ -84,6 +96,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
           tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
           options: data.options || {},
           stock: Number(data.stock || 0),
+          variants: Array.isArray(data.variants) ? data.variants : [],
           shippingWeight: Number(data.shippingWeight || 0),
           shippingWeightUnit: String(data.shippingWeightUnit || "oz"),
           isActive: Boolean(data.isActive),
@@ -92,13 +105,12 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
 
         setProduct(loadedProduct);
         setSelectedImage(loadedProduct.imageUrls[0] || "");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadProduct();
+      }, (error) => { setLoadError(error.message); setLoading(false); });
   }, [slug]);
+
+  const variant = product ? selectedVariant(product.variants, selectedOptions) : undefined;
+  const available = variant || (product && !product.variants.length ? { variantKey: "default", optionValues: selectedOptions, stock: product.stock } : undefined);
+  const purchaseLimit = available && (available.trackInventory === false || available.allowBackorder) ? 999 : Math.max(0, available?.stock || 0);
 
   const hasDiscount = useMemo(() => {
     if (!product) return false;
@@ -114,6 +126,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
   }, [product, hasDiscount]);
 
   function selectOption(optionName: string, value: string) {
+    setQuantity(1);
     setSelectedOptions((current) => ({
       ...current,
       [optionName]: value,
@@ -123,22 +136,79 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
   function addToCart() {
     if (!product) return;
 
-    const cartItem = {
+    const requiredOptions = Object.entries(product.options || {}).filter(
+      ([, values]) => Array.isArray(values) && values.length > 0,
+    );
+
+    const missingOption = requiredOptions.find(
+      ([optionName]) => !selectedOptions[optionName],
+    );
+
+    if (missingOption) {
+      alert(`Please select ${missingOption[0]}.`);
+      return;
+    }
+
+    if (!available || !canPurchase(available, quantity)) {
+      alert("This selection is unavailable or the requested quantity exceeds stock.");
+      return;
+    }
+
+    const cartItem: StoredCartItem = {
+      variantKey: available.variantKey,
+      sku: variant?.sku || "",
       productId: product.id,
       name: product.name,
       slug: product.slug,
       price: product.price,
       imageUrl: product.imageUrls[0] || "",
       quantity,
-      options: selectedOptions,
+      options: { ...selectedOptions },
+      shippingWeight: product.shippingWeight || 0,
+      shippingWeightUnit: product.shippingWeightUnit || "oz",
     };
 
-    const currentCart = JSON.parse(localStorage.getItem("cart") || "[]");
-    currentCart.push(cartItem);
-    localStorage.setItem("cart", JSON.stringify(currentCart));
+    try {
+      const saved = localStorage.getItem(CART_KEY);
 
-    window.dispatchEvent(new Event("cart-updated"));
-    alert("Added to cart.");
+      const currentCart: StoredCartItem[] = saved
+        ? (JSON.parse(saved) as StoredCartItem[])
+        : [];
+
+      const existingIndex = currentCart.findIndex(
+        (item) =>
+          item.productId === product.id &&
+          sameOptions(item.options || {}, selectedOptions),
+      );
+
+      if (existingIndex >= 0) {
+        currentCart[existingIndex].quantity = Math.min(
+          currentCart[existingIndex].quantity + quantity,
+          purchaseLimit,
+        );
+      } else {
+        currentCart.push({ ...cartItem, quantity: Math.min(quantity, purchaseLimit) });
+      }
+
+      localStorage.setItem(CART_KEY, JSON.stringify(currentCart));
+
+      window.dispatchEvent(
+        new CustomEvent("cart-updated", {
+          detail: currentCart,
+        }),
+      );
+
+      const goToCart = window.confirm(
+        `${product.name} was added to your cart.\n\nWould you like to go to your cart?`,
+      );
+
+      if (goToCart) {
+        window.location.assign("/cart");
+      }
+    } catch (error) {
+      console.error("Add to cart error:", error);
+      alert("Unable to add this item to your cart.");
+    }
   }
 
   if (loading) {
@@ -157,7 +227,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
         <section className="mx-auto max-w-3xl rounded-[2rem] border border-border bg-card/70 p-10 text-center backdrop-blur-xl">
           <h1 className="text-4xl font-black uppercase">Product Not Found</h1>
           <p className="mt-4 text-muted">
-            This product may be unavailable or inactive.
+            {loadError ? "Unable to load this product. Please try again." : "This product may be unavailable or inactive."}
           </p>
           <Link
             href="/shop"
@@ -185,7 +255,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
           <div className="space-y-4">
             <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card/70 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               {product.isFeatured && (
-                <div className="absolute left-5 top-5 z-20 rounded-full bg-accent px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(152,0,0,0.35)]">
+                <div className="absolute left-5 top-5 z-20 rounded-full bg-accent px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(102,120,74,0.35)]">
                   Featured
                 </div>
               )}
@@ -226,7 +296,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
                       onClick={() => setSelectedImage(url)}
                       className={`relative aspect-square overflow-hidden rounded-2xl border bg-card transition ${
                         active
-                          ? "border-accent shadow-[0_0_24px_rgba(152,0,0,0.35)]"
+                          ? "border-accent shadow-[0_0_24px_rgba(102,120,74,0.35)]"
                           : "border-border"
                       }`}
                     >
@@ -252,7 +322,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
                 </span>
               )}
 
-              {product.stock > 0 ? (
+              {(available ? purchaseLimit > 0 : product.variants.some(variant => canPurchase(variant, 1))) ? (
                 <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-muted">
                   <Check size={13} />
                   In Stock
@@ -269,9 +339,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
             </h1>
 
             <div className="mt-5 flex items-end gap-3">
-              <p className="text-3xl font-black">
-                ${product.price.toFixed(2)}
-              </p>
+              <p className="text-3xl font-black">${product.price.toFixed(2)}</p>
 
               {hasDiscount && (
                 <p className="pb-1 text-lg font-bold text-muted line-through">
@@ -334,7 +402,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
                 <button
                   type="button"
                   onClick={() =>
-                    setQuantity((q) => Math.min(product.stock || 99, q + 1))
+                    setQuantity((q) => Math.max(1, Math.min(purchaseLimit, q + 1)))
                   }
                   className="flex h-12 w-12 items-center justify-center"
                 >
@@ -345,13 +413,13 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={addToCart}
-                disabled={product.stock <= 0}
-                className="group relative flex h-12 flex-1 items-center justify-center overflow-hidden rounded-full bg-accent px-6 text-xs font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(152,0,0,0.35)] transition disabled:opacity-50"
+                disabled={!available || !canPurchase(available, quantity)}
+                className="group relative flex h-12 flex-1 items-center justify-center overflow-hidden rounded-full bg-accent px-6 text-xs font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(102,120,74,0.35)] transition disabled:opacity-50"
               >
                 <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:opacity-100" />
                 <span className="relative z-10 flex items-center gap-2">
                   <ShoppingBag size={16} />
-                  Add To Cart
+                  {!available ? "Select Options" : purchaseLimit <= 0 ? "Sold Out" : "Add To Cart"}
                 </span>
               </button>
             </div>

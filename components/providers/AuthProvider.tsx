@@ -1,5 +1,7 @@
 "use client";
 
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { auth, googleProvider } from "@/lib/firebase";
 import {
   User,
@@ -70,6 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (currentUser) {
         try {
+          if (!currentUser.isAnonymous) {
+            const profile = doc(db, 'users', currentUser.uid);
+            if (!(await getDoc(profile)).exists()) await setDoc(profile, {
+              uid: currentUser.uid, displayName: currentUser.displayName || '', email: currentUser.email || '',
+              photoURL: currentUser.photoURL || '', role: 'customer', rewardsPoints: 0, lifetimePoints: 0,
+              tier: 'Rebel Starter', isDisabled: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+            });
+          }
           await currentUser.reload();
           setUser(auth.currentUser);
         } catch {

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { finishCheckout } from "../commerce";
 
 import type { CartItem } from "../types/cart";
 import { centsToDollars, toNumber } from "../utils/stripeMetadata";
@@ -45,53 +46,10 @@ function getFulfillmentStatus(fulfillmentType: string) {
   return "needs_shipping_label";
 }
 
-async function updateInventoryForItems(
-  transaction: FirebaseFirestore.Transaction,
-  db: FirebaseFirestore.Firestore,
-  items: CartItem[],
-) {
-  for (const item of items) {
-    if (!item.productId) continue;
-
-    const quantity = Math.max(1, Number(item.quantity || 1));
-
-    const productRef = db.collection("products").doc(item.productId);
-    const productSnap = await transaction.get(productRef);
-
-    if (productSnap.exists) {
-      const currentStock = Number(productSnap.data()?.stock || 0);
-
-      transaction.update(productRef, {
-        stock: Math.max(0, currentStock - quantity),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-
-    const inventorySnap = await db
-      .collection("inventory")
-      .where("productId", "==", item.productId)
-      .limit(1)
-      .get();
-
-    if (!inventorySnap.empty) {
-      const invRef = inventorySnap.docs[0].ref;
-      const inventoryData = inventorySnap.docs[0].data();
-
-      const currentAvailable = Number(inventoryData.stockAvailable || 0);
-      const currentSold = Number(inventoryData.soldCount || 0);
-
-      transaction.update(invRef, {
-        stockAvailable: Math.max(0, currentAvailable - quantity),
-        soldCount: currentSold + quantity,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-  }
-}
-
 export async function createOrderFromCheckoutSession(
   session: StripeCheckoutSession,
 ) {
+  if (session.payment_status !== "paid") return;
   const db = admin.firestore();
 
   const sessionId = session.id;
@@ -197,30 +155,8 @@ export async function createOrderFromCheckoutSession(
     source: "stripe_webhook",
   };
 
-  await db.runTransaction(async (transaction) => {
-    const orderSnap = await transaction.get(orderRef);
-
-    if (orderSnap.exists) {
-      return;
-    }
-
-    await updateInventoryForItems(transaction, db, items);
-
-    transaction.set(orderRef, orderData);
-
-    transaction.set(
-      checkoutRef,
-      {
-        status: "paid",
-        orderId: sessionId,
-        stripeCheckoutSessionId: sessionId,
-        stripePaymentIntentId,
-        paidAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-  });
+  if (amountTotalCents !== toNumber(checkout.totalCents)) throw new Error("Payment total does not match checkout.");
+  await finishCheckout(db, checkoutId, { id: sessionId, data: orderData });
 
   console.log(`Created order ${sessionId} from checkout ${checkoutId}`);
 }

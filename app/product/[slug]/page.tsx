@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { collection, getDocs, limit, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import ProductDetailsClient from "./ProductDetailsClient";
+import { adminDb } from '@/lib/firebaseAdmin';
 
 const siteUrl = "https://nurnrebel.com";
 const defaultOgImage = `${siteUrl}/og-nurnrebel.png`;
@@ -44,16 +43,17 @@ function cleanDescription(value: string) {
 
 async function getProductSeo(slug: string): Promise<ProductSeo | null> {
   try {
-    const q = query(
-      collection(db, "products"),
-      where("slug", "==", slug),
-      where("isActive", "==", true),
-      limit(1),
-    );
+    const snap = await adminDb
+      .collection("products")
+      .where("slug", "==", slug)
+      .where("isActive", "==", true)
+      .limit(1)
+      .get();
 
-    const snap = await getDocs(q);
-
-    if (snap.empty) return null;
+    if (snap.empty) {
+      console.error(`Product SEO not found for slug: ${slug}`);
+      return null;
+    }
 
     const data = snap.docs[0].data();
 
@@ -80,7 +80,8 @@ async function getProductSeo(slug: string): Promise<ProductSeo | null> {
       seoKeywords,
       ogImage: toAbsoluteUrl(rawImage),
     };
-  } catch {
+  } catch (error) {
+    console.error("Failed loading product SEO:", error);
     return null;
   }
 }

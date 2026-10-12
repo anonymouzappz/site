@@ -6,13 +6,13 @@ const games = [
     title: "Spades",
     href: "/cards/spades",
     desc: "Team-based trick-taking card game with bids, bags, books, and strategy.",
-    tag: "1-4 Players",
+    tag: "4 seats · Solo, local & online",
   },
   {
     title: "Tonk",
     href: "/cards/tonk",
-    desc: "Fast street-style card game with drops, knocks, spreads, and quick wins.",
-    tag: "2-4 Players",
+    desc: "Street-style five-card action with drops, spreads, hits, and hood house rules.",
+    tag: "2–4 seats · Solo, local & online",
   },
 ];
 
@@ -20,7 +20,7 @@ export default function CardsCornerPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <section className="mx-auto max-w-7xl px-6 py-20">
-        <div className="mb-12 max-w-3xl">
+        <div className="mb-12 rounded-[2rem] border border-border bg-[linear-gradient(90deg,rgba(7,16,14,.95),rgba(7,16,14,.35)),url(/assets/cards-corner-hero.png)] bg-cover bg-center p-8 py-20 md:p-16">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted">
             <Sparkles size={14} />
             Cards Corner
@@ -31,8 +31,8 @@ export default function CardsCornerPage() {
           </h1>
 
           <p className="mt-5 text-lg leading-8 text-muted">
-            Welcome to Cards Corner — the Nurnrebel card-game hub featuring
-            Spades and Tonk.
+            Your seat at the Nurnrebel card club. Play Spades and Tonk with smart
+            opponents, online rooms, local pass-and-play, hood rules, and saved matches.
           </p>
         </div>
 

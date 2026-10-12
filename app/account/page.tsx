@@ -1,7 +1,8 @@
 "use client";
 
+import OrderHistory from "@/components/account/OrderHistory";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { auth, db, storage } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { motion } from "framer-motion";
 import {
   Camera,
@@ -136,7 +137,13 @@ export default function AccountPage() {
       await setDoc(
         doc(db, "users", user.uid),
         {
-          ...profile,
+          displayName: profile.displayName,
+          photoURL: profile.photoURL,
+          phone: profile.phone,
+          address: profile.address,
+          city: profile.city,
+          state: profile.state,
+          zipCode: profile.zipCode,
           uid: user.uid,
           email: user.email || profile.email,
           updatedAt: serverTimestamp(),
@@ -145,6 +152,8 @@ export default function AccountPage() {
       );
 
       setMessage("Account updated successfully.");
+    } catch {
+      setMessage("Unable to save your account. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -180,6 +189,8 @@ export default function AccountPage() {
       );
 
       setMessage("Profile image uploaded.");
+    } catch {
+      setMessage("Unable to upload your image. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -513,6 +524,7 @@ export default function AccountPage() {
           </div>
         </motion.div>
       </section>
+      <OrderHistory />
     </div>
   );
 }

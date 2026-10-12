@@ -1,23 +1,13 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/lib/firebaseAdmin";
+import { adminDb, adminAuth } from "@/lib/firebaseAdmin";
+import { reserveCart, finishCheckout, CartError } from "@/functions/src/commerce";
+import { POST as estimateDelivery } from "@/app/api/delivery/estimate/route";
+import type { CartItem } from "@/functions/src/types/cart";
 
 export const runtime = "nodejs";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-
-type CartItem = {
-  productId: string;
-  name: string;
-  slug: string;
-  price: number;
-  imageUrl: string;
-  quantity: number;
-  options: Record<string, string>;
-  shippingWeight?: number;
-  shippingWeightUnit?: string;
-};
 
 type FulfillmentType = "pickup" | "delivery" | "shipping";
 
@@ -108,35 +98,15 @@ function calculateProcessingFeeCents(baseAmountCents: number) {
 function getSiteUrl(req: Request) {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ||
-    req.headers.get("origin") ||
-    "http://localhost:3000"
+    new URL(req.url).origin
   );
-}
-
-function isValidCartItem(item: CartItem) {
-  return Boolean(
-    item.productId &&
-      item.name &&
-      safeNumber(item.price) > 0 &&
-      safeNumber(item.quantity) > 0,
-  );
-}
-
-function normalizeCartItem(item: CartItem): CartItem {
-  return {
-    productId: String(item.productId || ""),
-    name: String(item.name || "Nurnrebel Product"),
-    slug: String(item.slug || ""),
-    price: safeNumber(item.price),
-    imageUrl: String(item.imageUrl || ""),
-    quantity: Math.max(1, Math.floor(safeNumber(item.quantity, 1))),
-    options: item.options || {},
-    shippingWeight: safeNumber(item.shippingWeight),
-    shippingWeightUnit: String(item.shippingWeightUnit || "oz"),
-  };
 }
 
 export async function POST(req: Request) {
+  let stripe: Stripe | null = null;
+  let stripeSessionId = "";
+  let stripeAttempted = false;
+  let reserved = false;
   let checkoutRef:
     | FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>
     | null = null;
@@ -150,17 +120,14 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as CheckoutPayload;
-
-    const rawItems = Array.isArray(body.items) ? body.items : [];
-    const validItems = rawItems
-      .map(normalizeCartItem)
-      .filter(isValidCartItem);
-
-    if (validItems.length === 0) {
-      return NextResponse.json(
-        { error: "Cart is empty." },
-        { status: 400 },
-      );
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    let customerId = "";
+    const token = req.headers.get('authorization')?.replace(/^Bearer /, '');
+    if (token) {
+      try { customerId = (await adminAuth.verifyIdToken(token)).uid; }
+      catch { return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 }); }
+      const profile = (await adminDb.collection('users').doc(customerId).get()).data();
+      if (profile?.isDisabled === true) return NextResponse.json({ error: 'This account is disabled.' }, { status: 403 });
     }
 
     const fulfillmentType: FulfillmentType =
@@ -172,25 +139,35 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    const settings = (await adminDb.collection('storeSettings').doc('public').get()).data();
+    if (settings?.[`${fulfillmentType}Enabled`] === false) throw new CartError('This fulfillment method is currently unavailable.');
 
-    const fulfillmentFee = safeNumber(body.fulfillmentFee);
+    checkoutRef = adminDb.collection("checkout_sessions").doc();
+    const validItems = await reserveCart(adminDb, checkoutRef, body.items || [], customerId);
+    reserved = true;
+    let fulfillmentFee = 0;
 
     if (fulfillmentType === "delivery") {
-      if (!body.deliveryEstimate?.available) {
-        return NextResponse.json(
-          { error: "Calculate delivery before checkout." },
-          { status: 400 },
-        );
-      }
+      const response = await estimateDelivery(new Request(req.url, { method: 'POST', body: JSON.stringify(body.deliveryAddress) }));
+      const estimate = await response.json();
+      if (!response.ok || !estimate.available) throw new CartError(estimate.error || estimate.reason || 'Delivery unavailable.');
+      body.deliveryEstimate = estimate;
+      fulfillmentFee = safeNumber(estimate.fee);
     }
 
     if (fulfillmentType === "shipping") {
-      if (!body.selectedShippingRate?.objectId) {
-        return NextResponse.json(
-          { error: "Select a shipping rate before checkout." },
-          { status: 400 },
-        );
+      const quoteId = body.selectedShippingRate?.objectId;
+      if (!quoteId || quoteId.includes('/')) throw new CartError('Select a shipping rate before checkout.');
+      const quote = (await adminDb.collection('shipping_quotes').doc(quoteId).get()).data();
+      const weight = validItems.reduce((sum, item) => sum + safeNumber(item.shippingWeight) *
+        ({ oz: 1, lb: 16, lbs: 16, kg: 35.274, g: 0.035274 }[item.shippingWeightUnit || 'oz'] || 1) * item.quantity, 0);
+      const cleanAddress = (address: Address | null | undefined) => JSON.stringify(['street1','street2','city','state','zip'].map(key => String(address?.[key as keyof Address] || '').trim().toLowerCase()));
+      if (!quote || quote.expiresAt.toMillis() < Date.now() || quote.currency !== 'USD' ||
+          cleanAddress(quote.address) !== cleanAddress(body.shippingAddress) || Math.abs(quote.weight - weight) > 0.01) {
+        throw new CartError('Your shipping quote expired or the cart changed. Calculate shipping again.');
       }
+      body.selectedShippingRate = quote.rate;
+      fulfillmentFee = safeNumber(quote.rate.amount);
     }
 
     const subtotalCents = validItems.reduce((total, item) => {
@@ -280,9 +257,7 @@ export async function POST(req: Request) {
       });
     }
 
-    checkoutRef = adminDb.collection("checkout_sessions").doc();
-
-    await checkoutRef.set({
+    await checkoutRef.update({
       checkoutId: checkoutRef.id,
       status: "pending",
 
@@ -310,7 +285,8 @@ export async function POST(req: Request) {
       processingFee: fromCents(processingFeeCents),
       total: fromCents(totalCents),
 
-      totalWeightOz: safeNumber(body.totalWeightOz),
+      totalWeightOz: validItems.reduce((sum, item) => sum + safeNumber(item.shippingWeight) *
+        ({ oz: 1, lb: 16, lbs: 16, kg: 35.274, g: 0.035274 }[item.shippingWeightUnit || 'oz'] || 1) * item.quantity, 0),
 
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -320,9 +296,11 @@ export async function POST(req: Request) {
 
     const siteUrl = getSiteUrl(req);
 
+    stripeAttempted = true;
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
+      expires_at: Math.floor(Date.now() / 1000) + 1800,
 
       line_items: lineItems,
 
@@ -335,7 +313,8 @@ export async function POST(req: Request) {
 
       success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl}/cart`,
-    });
+    }, { idempotencyKey: checkoutRef.id });
+    stripeSessionId = session.id;
 
     await checkoutRef.update({
       stripeCheckoutSessionId: session.id,
@@ -354,7 +333,14 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Stripe checkout error:", error);
 
-    if (checkoutRef) {
+    if (checkoutRef && reserved) {
+      // Never release units while a live payment URL can still accept money.
+      let safeToRelease = !stripeAttempted;
+      if (stripeSessionId && stripe) {
+        try { safeToRelease = (await stripe.checkout.sessions.expire(stripeSessionId)).status === 'expired'; }
+        catch (cleanupError) { console.error('Checkout cleanup deferred to recovery job', cleanupError); }
+      }
+      if (safeToRelease) await finishCheckout(adminDb, checkoutRef.id);
       await checkoutRef.set(
         {
           status: "error",
@@ -375,7 +361,7 @@ export async function POST(req: Request) {
             ? error.message
             : "Unable to create checkout session.",
       },
-      { status: 500 },
+      { status: error instanceof CartError ? 409 : 500 },
     );
   }
 }

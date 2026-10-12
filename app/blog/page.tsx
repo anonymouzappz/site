@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useContent } from "@/lib/useContent";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -12,69 +14,9 @@ import {
   Palette,
   Search,
   Shield,
-  Sparkles,
   Star,
   Tag,
 } from "lucide-react";
-
-const posts = [
-  {
-    title: "Why Clothing Should Say Something",
-    slug: "why-clothing-should-say-something",
-    category: "Mindset",
-    date: "Drop Journal",
-    readTime: "4 min read",
-    excerpt:
-      "Fashion is more than appearance. It can be identity, awareness, resistance, and a language of its own.",
-  },
-  {
-    title: "The Meaning Behind Wear Your Mindset",
-    slug: "the-meaning-behind-wear-your-mindset",
-    category: "Brand Story",
-    date: "Manifesto",
-    readTime: "5 min read",
-    excerpt:
-      "Nurnrebel aka XNX was built around the idea that customers should be able to wear what they think, feel, and stand for.",
-  },
-  {
-    title: "Social Awareness In Streetwear",
-    slug: "social-awareness-in-streetwear",
-    category: "Culture",
-    date: "Editorial",
-    readTime: "6 min read",
-    excerpt:
-      "Streetwear has always carried messages. Nurnrebel continues that energy through clean, intentional statement pieces.",
-  },
-  {
-    title: "How Statement Clothing Builds Confidence",
-    slug: "how-statement-clothing-builds-confidence",
-    category: "Mindset",
-    date: "Style Notes",
-    readTime: "4 min read",
-    excerpt:
-      "The right piece can change how a person shows up. Statement clothing can become part of confidence, posture, and personal identity.",
-  },
-  {
-    title: "The Role Of Culture In Streetwear",
-    slug: "the-role-of-culture-in-streetwear",
-    category: "Culture",
-    date: "Perspective",
-    readTime: "6 min read",
-    excerpt:
-      "Streetwear is shaped by music, neighborhoods, art, struggle, creativity, and the way people communicate without asking permission.",
-  },
-  {
-    title: "What Makes A Drop Feel Meaningful",
-    slug: "what-makes-a-drop-feel-meaningful",
-    category: "Drops",
-    date: "Drop Notes",
-    readTime: "5 min read",
-    excerpt:
-      "A drop is more than a product release when the clothing connects to a message, a moment, and a reason for people to wear it.",
-  },
-];
-
-const categories = ["All", "Mindset", "Culture", "Brand Story", "Drops"];
 
 const editorialTopics = [
   {
@@ -116,7 +58,7 @@ const faqs = [
   },
   {
     q: "Will the blog connect to the admin CMS?",
-    a: "Yes. This page is ready to become a full CMS-powered blog later, where posts can be added from the admin side and displayed automatically.",
+    a: "Published posts from the admin journal appear here automatically. Drafts stay private.",
   },
   {
     q: "Why add editorial content to a clothing brand?",
@@ -129,6 +71,16 @@ const faqs = [
 ];
 
 export default function BlogPage() {
+  const { items, loading, error } = useContent('blogPosts', 'isPublished');
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('All');
+  const categories = ['All', ...new Set(items.map(post => String(post.category || 'Journal')))];
+  const posts = items.filter(post => (activeCategory === 'All' || post.category === activeCategory) &&
+    `${post.title} ${post.excerpt} ${(post.tags || []).join(' ')}`.toLowerCase().includes(search.toLowerCase())).map(post => ({
+      ...post, title: String(post.title || ''), slug: String(post.slug || ''), category: String(post.category || 'Journal'),
+      excerpt: String(post.excerpt || ''), readTime: `${post.readMinutes || 3} min read`,
+      date: post.publishedAt?.toDate().toLocaleDateString() || 'Journal',
+    }));
   return (
     <div className="min-h-screen text-foreground">
       {/* HERO */}
@@ -176,6 +128,8 @@ export default function BlogPage() {
             <Search size={18} className="text-muted" />
             <input
               placeholder="Search journal..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
               className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted/50"
             />
           </motion.div>
@@ -185,11 +139,12 @@ export default function BlogPage() {
       {/* CATEGORY BAR */}
       <section className="border-b border-border bg-surface/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap gap-3 px-5 py-6">
-          {categories.map((category, index) => (
+          {categories.map((category) => (
             <button
               key={category}
+              onClick={() => setActiveCategory(category)}
               className={`rounded-full border px-5 py-2 text-xs font-black uppercase tracking-widest ${
-                index === 0
+                activeCategory === category
                   ? "border-foreground bg-foreground text-background"
                   : "border-border bg-card text-muted hover:border-foreground hover:text-foreground"
               }`}
@@ -390,6 +345,7 @@ export default function BlogPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
+          {(loading || error || !posts.length) && <p role="status" className="text-muted">{error || (loading ? "Loading journal…" : "No published posts match your search.")}</p>}
           {posts.map((post, index) => (
             <motion.article
               key={post.slug}

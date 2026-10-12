@@ -46,7 +46,7 @@ export default function MusicPlayer() {
   const canPlayFullTrack = useMemo(() => {
     if (!currentTrack) return true;
 
-    if (currentTrack.allowFullPreviewInDev) return true;
+    if (process.env.NODE_ENV !== "production" && currentTrack.allowFullPreviewInDev) return true;
     if (!currentTrack.isForSale) return true;
 
     return false;
