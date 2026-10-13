@@ -11,7 +11,7 @@ import {
   Sparkles,
   Truck,
 } from "lucide-react";
-import Image from "next/image";
+import ProductGallery from "@/components/shop/ProductGallery";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -54,7 +54,6 @@ type Product = {
 
 export default function ProductDetailsClient({ slug }: { slug: string }) {
   const [product, setProduct] = useState<Product | null>(null);
-  const [selectedImage, setSelectedImage] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
   >({});
@@ -104,7 +103,6 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
         };
 
         setProduct(loadedProduct);
-        setSelectedImage(loadedProduct.imageUrls[0] || "");
       }, (error) => { setLoadError(error.message); setLoading(false); });
   }, [slug]);
 
@@ -252,67 +250,7 @@ export default function ProductDetailsClient({ slug }: { slug: string }) {
         </Link>
 
         <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
-          <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card/70 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-              {product.isFeatured && (
-                <div className="absolute left-5 top-5 z-20 rounded-full bg-accent px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white shadow-[0_0_35px_rgba(102,120,74,0.35)]">
-                  Featured
-                </div>
-              )}
-
-              {hasDiscount && (
-                <div className="absolute right-5 top-5 z-20 rounded-full bg-foreground px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-background">
-                  Save {discountPercent}%
-                </div>
-              )}
-
-              <div className="relative aspect-square overflow-hidden rounded-[1.5rem] bg-background">
-                {selectedImage ? (
-                  <Image
-                    src={selectedImage}
-                    alt={product.name}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="object-cover"
-                    priority
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <ShoppingBag size={72} className="text-muted" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {product.imageUrls.length > 1 && (
-              <div className="grid grid-cols-5 gap-3">
-                {product.imageUrls.map((url) => {
-                  const active = selectedImage === url;
-
-                  return (
-                    <button
-                      key={url}
-                      type="button"
-                      onClick={() => setSelectedImage(url)}
-                      className={`relative aspect-square overflow-hidden rounded-2xl border bg-card transition ${
-                        active
-                          ? "border-accent shadow-[0_0_24px_rgba(102,120,74,0.35)]"
-                          : "border-border"
-                      }`}
-                    >
-                      <Image
-                        src={url}
-                        alt={product.name}
-                        fill
-                        sizes="120px"
-                        className="object-cover"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ProductGallery key={product.id} images={product.imageUrls} name={product.name} featured={product.isFeatured} discount={hasDiscount ? discountPercent : undefined}/>
 
           <div className="rounded-[2rem] border border-border bg-card/70 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:p-8">
             <div className="mb-5 flex flex-wrap gap-2">

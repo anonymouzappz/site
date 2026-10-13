@@ -4,6 +4,8 @@ The Next.js storefront and the Flutter application in `../admin_app` share one F
 
 ## Local development
 
+The Next.js build uses `tsconfig.storefront.json`, with explicit storefront folders in the base TypeScript configuration. Firebase Functions has its own `functions/tsconfig.json` and dependencies; scheduler and webhook entrypoints are not included in website type checking. Shared catalog and checkout helpers imported by the website are still checked. Commit both TypeScript configs and `next.config.ts` before retrying an App Hosting rollout.
+
 Run `npm ci`, then `npm run dev`. The Flutter admin uses `flutter pub get` and `flutter run -d chrome`. Server routes need Firebase Admin credentials or Application Default Credentials. Keep secrets out of source control.
 
 The public Firebase variables are `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, and `NEXT_PUBLIC_FIREBASE_APP_ID`. The admin Firebase options and server project must match the storefront project.
@@ -11,6 +13,8 @@ The public Firebase variables are `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_F
 For a local service account, configure `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, and `FIREBASE_ADMIN_PRIVATE_KEY`. On Firebase App Hosting, the runtime can use Application Default Credentials. Configure `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS origin.
 
 ## Commerce
+
+Product galleries support a full-screen image viewer with up to 4× zoom, mobile pinch/double-tap and drag controls, swipe navigation at the default zoom, desktop wheel/double-click zoom, image thumbnails, keyboard arrows, and Escape to close. Panning is bounded to the displayed image and changing images resets the zoom.
 
 Admin products create one inventory row per variant. The storefront matches option values rather than JSON property order. Cart lines carry the variant key and SKU. Checkout reads current prices, images, names, weights, active state, and variant availability from Firestore.
 
