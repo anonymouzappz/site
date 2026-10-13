@@ -1,13 +1,14 @@
-import * as admin from 'firebase-admin';
+
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import Stripe from 'stripe';
 import { finishCheckout } from './commerce';
 import { createOrderFromCheckoutSession } from './orders/createOrderFromCheckoutSession';
+import { getFirestore } from "firebase-admin/firestore";
 
 const stripeKey = defineSecret('STRIPE_SECRET_KEY');
 export const cleanupCheckouts = onSchedule({ schedule: 'every 30 minutes', region: 'us-east1', secrets: [stripeKey] }, async () => {
-  const db = admin.firestore();
+  const db = getFirestore();
   const stripe = new Stripe(stripeKey.value());
   const pending = await db.collection('checkout_sessions').where('inventoryState', '==', 'reserved').get();
   for (const checkout of pending.docs) {

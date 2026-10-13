@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgeCheck,
   Clock,
   HelpCircle,
   Mail,
@@ -19,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { sendContactMessage } from "@/lib/contact";
+import RobotCheck from "@/components/contact/RobotCheck";
 
 const contactOptions = [
   {
@@ -108,9 +108,14 @@ export default function ContactPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const [website, setWebsite] = useState('');
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
+    if (!captchaToken) { setStatus('Please complete the robot check first.'); return; }
 
     try {
       setLoading(true);
@@ -121,6 +126,8 @@ export default function ContactPage() {
         email,
         type,
         message,
+        captchaToken,
+        website,
       });
 
       setName("");
@@ -132,6 +139,8 @@ export default function ContactPage() {
       setStatus(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
       setLoading(false);
+      setCaptchaToken('');
+      setCaptchaReset(value => value + 1);
     }
   }
 
@@ -310,11 +319,13 @@ export default function ContactPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <div aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden"><label>Website<input name="website" value={website} onChange={e => setWebsite(e.target.value)} autoComplete="off" tabIndex={-1}/></label></div>
             <div className="grid gap-4 md:grid-cols-2">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Name"
+                maxLength={200}
                 required
                 className="rounded-full border border-border bg-card px-5 py-4 text-sm text-foreground outline-none placeholder:text-muted/50"
               />
@@ -323,6 +334,7 @@ export default function ContactPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
+                maxLength={254}
                 type="email"
                 required
                 className="rounded-full border border-border bg-card px-5 py-4 text-sm text-foreground outline-none placeholder:text-muted/50"
@@ -347,13 +359,15 @@ export default function ContactPage() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Message"
+              maxLength={10000}
               rows={7}
               required
               className="w-full resize-none rounded-[2rem] border border-border bg-card px-5 py-4 text-sm text-foreground outline-none placeholder:text-muted/50"
             />
 
+            <RobotCheck onToken={setCaptchaToken} reset={captchaReset}/>
             <button
-              disabled={loading}
+              disabled={loading || !captchaToken}
               className="w-full rounded-full bg-foreground px-6 py-4 text-sm font-black uppercase tracking-[0.25em] text-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Sending..." : "Submit Message"}

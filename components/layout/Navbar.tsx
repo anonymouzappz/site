@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 const navItems = [
   { label: "Home", href: "/" },
   { label: "Shop", href: "/shop" },
+  { label: "Jersey Studio", href: "/jersey-studio" },
   { label: "Cards", href: "/cards" },
   { label: "About", href: "/about" },
   { label: "Movement", href: "/movement" },

@@ -119,6 +119,7 @@ export default function Footer() {
           <div className="mt-5 flex flex-col gap-3 text-sm text-muted">
             {[
               ["Shop", "/shop"],
+              ["Jersey Studio", "/jersey-studio"],
               ["About Us", "/about"],
               ["The Movement", "/movement"],
               ["Blog", "/blog"],

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const admin = require('firebase-admin');
 const {initializeApp, deleteApp} = require('firebase/app');
-const {getFirestore,connectFirestoreEmulator,doc,getDoc,setDoc,updateDoc,collection,getDocs,query,where,terminate} = require('firebase/firestore');
+const {getFirestore,connectFirestoreEmulator,doc,getDoc,setDoc,updateDoc,collection,getDocs,query,where,terminate,serverTimestamp} = require('firebase/firestore');
 if (!/^(localhost|127\.0\.0\.1):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '')) throw new Error('Local FIRESTORE_EMULATOR_HOST is required.');
 const [host,port] = process.env.FIRESTORE_EMULATOR_HOST.split(':');
 admin.initializeApp({projectId:'demo-xnx'});
@@ -48,6 +48,31 @@ test('admins can manage catalog and settings; disabled admins cannot',async()=>{
   await updateDoc(doc(owner,'gameRooms','rules-room'),{status:'closed'});
   await assert.rejects(setDoc(doc(disabled,'products','rules-denied'),{isActive:true}), /permission/);
 });
+test('jersey source is private and immutable; only active admins can decide once',async()=>{
+  await db.doc('users/jersey-customer').set({role:'customer',isDisabled:false});
+  await db.doc('users/jersey-admin').set({role:'admin',isDisabled:false});
+  await db.doc('users/jersey-disabled').set({role:'admin',isDisabled:true});
+  await db.doc('jerseySubmissions/rules-jersey').set({customerId:'jersey-customer',status:'pending',design:{version:1},reviewNote:''});
+  const customer=client('jersey-customer'),owner=client('jersey-admin'),disabled=client('jersey-disabled'),other=client('jersey-other');
+  assert.ok((await getDoc(doc(customer,'jerseySubmissions','rules-jersey'))).exists());
+  await assert.rejects(getDoc(doc(other,'jerseySubmissions','rules-jersey')),/permission/);
+  await assert.rejects(setDoc(doc(customer,'jerseySubmissions','fake'),{customerId:'jersey-customer',status:'pending'}),/permission/);
+  const decision={status:'changes_requested',reviewNote:'Please use a higher resolution logo.',reviewedBy:'jersey-admin',reviewedAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  await assert.rejects(updateDoc(doc(customer,'jerseySubmissions','rules-jersey'),decision),/permission/);
+  await assert.rejects(updateDoc(doc(disabled,'jerseySubmissions','rules-jersey'),{...decision,reviewedBy:'jersey-disabled'}),/permission/);
+  await assert.rejects(updateDoc(doc(owner,'jerseySubmissions','rules-jersey'),{...decision,reviewNote:''}),/permission/);
+  await assert.rejects(updateDoc(doc(owner,'jerseySubmissions','rules-jersey'),{...decision,design:{version:2}}),/permission/);
+  await updateDoc(doc(owner,'jerseySubmissions','rules-jersey'),decision);
+  await assert.rejects(updateDoc(doc(owner,'jerseySubmissions','rules-jersey'),{...decision,status:'approved'}),/permission/);
+});
+test('direct contact creation cannot bypass the checked server endpoint',async()=>{
+  const guest=client('contact-spammer');
+  await assert.rejects(setDoc(doc(guest,'contactMessages','bypass-captcha'),{
+    name:'Spammer',email:'spam@example.com',type:'General Inquiry',message:'This bypasses the form.',status:'new',isArchived:false,
+    createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+  }),/permission/);
+});
+
 test.after(async()=>{
   for(const {app,firestore} of sessions) {await terminate(firestore);await deleteApp(app);}
   await db.terminate();await admin.app().delete();

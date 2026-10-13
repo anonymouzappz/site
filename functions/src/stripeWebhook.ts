@@ -1,8 +1,8 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
+import { onRequest } from "firebase-functions/v2/https";
 import Stripe from "stripe";
-import * as admin from 'firebase-admin';
-import { finishCheckout } from './commerce';
+import { finishCheckout } from "./commerce";
 
 import { createOrderFromCheckoutSession } from "./orders/createOrderFromCheckoutSession";
 
@@ -64,14 +64,22 @@ export const stripeWebhook = onRequest(
     }
 
     try {
-      if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
+      if (
+        event.type === "checkout.session.completed" ||
+        event.type === "checkout.session.async_payment_succeeded"
+      ) {
         const session = event.data.object as StripeCheckoutSession;
 
         await createOrderFromCheckoutSession(session);
       }
-      if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
+      if (
+        event.type === "checkout.session.expired" ||
+        event.type === "checkout.session.async_payment_failed"
+      ) {
         const session = event.data.object as StripeCheckoutSession;
-        if (session.metadata?.checkoutId) await finishCheckout(admin.firestore(), session.metadata.checkoutId);
+        if (session.metadata?.checkoutId) {
+          await finishCheckout(getFirestore(), session.metadata.checkoutId);
+        }
       }
 
       res.json({ received: true });

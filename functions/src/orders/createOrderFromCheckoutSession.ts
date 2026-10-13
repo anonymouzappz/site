@@ -1,8 +1,13 @@
-import * as admin from "firebase-admin";
+
 import { finishCheckout } from "../commerce";
 
 import type { CartItem } from "../types/cart";
 import { centsToDollars, toNumber } from "../utils/stripeMetadata";
+
+import {
+  getFirestore,
+  FieldValue,
+} from "firebase-admin/firestore";
 
 type StripeCheckoutSession = {
   id: string;
@@ -50,7 +55,7 @@ export async function createOrderFromCheckoutSession(
   session: StripeCheckoutSession,
 ) {
   if (session.payment_status !== "paid") return;
-  const db = admin.firestore();
+  const db = getFirestore();
 
   const sessionId = session.id;
   const metadata = session.metadata || {};
@@ -80,7 +85,7 @@ export async function createOrderFromCheckoutSession(
         status: "paid",
         orderId: sessionId,
         stripeCheckoutSessionId: sessionId,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       },
       { merge: true },
     );
@@ -149,8 +154,8 @@ export async function createOrderFromCheckoutSession(
 
     totalWeightOz: toNumber(checkout.totalWeightOz),
 
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
 
     source: "stripe_webhook",
   };

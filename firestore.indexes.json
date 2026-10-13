@@ -4,5 +4,8 @@
     {"collectionGroup":"products","queryScope":"COLLECTION","fields":[{"fieldPath":"isActive","order":"ASCENDING"},{"fieldPath":"slug","order":"ASCENDING"}]},
     {"collectionGroup":"blogPosts","queryScope":"COLLECTION","fields":[{"fieldPath":"isPublished","order":"ASCENDING"},{"fieldPath":"slug","order":"ASCENDING"}]}
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {"collectionGroup":"jerseySubmissions","fieldPath":"design","indexes":[]},
+    {"collectionGroup":"jerseySubmissions","fieldPath":"previews","indexes":[]}
+  ]
 }

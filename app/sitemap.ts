@@ -109,6 +109,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const productPages = await getProductUrls();
+  staticPages.push({ url: `${siteUrl}/jersey-studio`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 });
 
   let blogPages: MetadataRoute.Sitemap = [];
   try {

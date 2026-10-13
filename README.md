@@ -28,7 +28,25 @@ Subscriber welcome messages and admin campaigns use the Firestore `mail` collect
 
 ## Content and management
 
+### Contact robot check
+
+The contact form now uses a reCAPTCHA v2 **I'm not a robot checkbox**, verified by `/api/contact` before any Firestore write. It also rejects a hidden bot-trap field, caps message sizes, and limits each email address to one message per minute. CAPTCHA tokens are never stored. The revised Firestore rules deny direct client creation of `contactMessages`, so scripts cannot bypass the checked endpoint.
+
+Create v2 checkbox keys at https://www.google.com/recaptcha/admin/create for `nurnrebel.com`, `www.nurnrebel.com` and `localhost` for development. Configure `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` and server-only `RECAPTCHA_SECRET_KEY`; `.env.recaptcha.example` shows the variable names. `RECAPTCHA_ALLOWED_HOSTNAMES` is a comma-separated server allowlist, defaulting to the two production domains. Localhost is accepted only in development. A missing key disables form submission and directs visitors to the existing email contacts.
+
+For App Hosting, make the public site key available at BUILD and RUNTIME, bind `RECAPTCHA_SECRET_KEY` to a Secret Manager secret at RUNTIME, and configure the hostname allowlist at RUNTIME. Keep the secret out of client variables. Deploy the configured storefront/API first, then `firebase deploy --only firestore:rules` from `site`. The contact rule change must be released with the checked endpoint: releasing it first stops the old contact form, and omitting it leaves the direct spam bypass open. The jersey permissions have already been applied to the live project independently of this pending CAPTCHA rollout.
+
 Published `blogPosts`, active `lookbook` entries and `collections` appear on the storefront. Drafts remain private. Journal search and category filters work on live content. Collections contain product IDs and link to filtered shop views. Store Settings controls announcements, pickup instructions and fulfillment methods. Customer account order history updates when admin changes fulfillment status. Music's development preview override is restricted to development builds.
+
+## Custom jersey designs
+
+Customers can upload up to three WOFF, WOFF2, TTF or OTF custom fonts (200 KB per file, subject to the combined design size limit), then select them on text layers. Font bytes are retained in drafts and submissions. Exports freeze custom lettering into the PNG so admin previews preserve it. On mobile, the compact front/back preview stays below the navigation while editing controls scroll.
+
+`/jersey-studio` offers front/back editing; basketball, soccer, football, baseball, hockey and fitted long-sleeve training cuts; eight typefaces; colors and optional patterns; movable text and raster artwork; layer controls; undo/redo; device-local drafts; and PNG concept exports. Garment previews include fabric shading, collars, cuffs and stitching, plus a button front on baseball jerseys. Signed-in customers submit a size, quantity and production notes to `/api/jerseys`. Immutable source and both rendered previews are stored privately in `jerseySubmissions`. A retry uses the same request ID; a customer cooldown limits new submissions to one every 30 seconds.
+
+The Flutter admin's **Jersey Designs** queue shows customer details, previews, original artwork and specifications. Active admins can approve, decline or request changes once, with required customer-visible notes for declines and changes. Customers see live decisions in the studio and can resubmit a requested revision; the previous submission is retained and linked to its replacement. Approval does not create an order, set a price or collect payment. Previews are concepts; production fit and placement still need confirmation.
+
+Deploy the updated Firestore rules and index exemptions with the storefront and rebuild the admin app. No new storage bucket or provider is needed. Drafts are saved only when the customer clicks **Save draft**, on the current browser/device. Keep server Firebase Admin credentials configured as described above. Large image payloads are capped before parsing, and submissions never accept client-supplied status or customer identity.
 
 ## Tonk and Spades
 

@@ -525,6 +525,7 @@ export default function AccountPage() {
         </motion.div>
       </section>
       <OrderHistory />
+      <div className="mx-auto max-w-7xl px-5 py-8"><Link href="/jersey-studio" className="inline-block rounded-xl border border-border bg-card px-6 py-4 font-bold">Design a jersey & track your submissions →</Link></div>
     </div>
   );
 }
